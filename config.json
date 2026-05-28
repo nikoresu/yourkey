@@ -1,3 +1,4 @@
 {
-  "max_allowed_views": 5
+  "max_allowed_views": 5,
+  "expiry_minutes": 60
 }

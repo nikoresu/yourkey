@@ -1,9 +1,11 @@
 import json
 import uuid
 from pathlib import Path
+from typing import cast
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from cachetools import TTLCache
 from cryptography.fernet import Fernet
 
 app = FastAPI()
@@ -11,11 +13,12 @@ templates = Jinja2Templates(directory="templates")
 
 config = json.loads(Path("config.json").read_text())
 max_allowed_views: int = config["max_allowed_views"]
+expiry_seconds: int = config["expiry_minutes"] * 60
 
 key = Fernet.generate_key()
 cipher = Fernet(key)
 
-store: dict[str, tuple[bytes, int]] = {}
+store = TTLCache(maxsize=10000, ttl=expiry_seconds)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -34,9 +37,9 @@ async def create(request: Request, secret: str = Form(...), max_views: int = For
 
 @app.get("/s/{secret_id}", response_class=HTMLResponse)
 async def reveal(secret_id: str, request: Request):
-    entry = store.get(secret_id)
-    if entry is None:
+    if secret_id not in store:
         return RedirectResponse(url="/")
+    entry = cast(tuple[bytes, int], store[secret_id])
     encrypted, remaining = entry
     if remaining <= 1:
         del store[secret_id]
